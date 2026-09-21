@@ -17,13 +17,10 @@ class FollowTurnDrawNode(Node):
     def __init__(self):
         super().__init__('follow_turn_draw_with_estop')
         self.e_stop = Event()
-        self.bumped = Event()
         self.detect_radius = 0.4 #radius of detection
         self.follow_dist = 0.2 #how closely the neato should follow the person
         self.obj_dist = None #distance to the closest obj or none if nothing is detected
         self.obj_angle = None #angle to get to the closest obj detected
-        self.bumped = False
-
         self.state = 'SEARCH'
         self.search_vel = 0.1 #how fast to drive forward while looking for someone to follow
         self.run_time = 30.0 #the time we want it to follow the person for
@@ -57,7 +54,7 @@ class FollowTurnDrawNode(Node):
     def process_bump(self, msg):
         """ """
         if msg.left_front or msg.right_front or msg.left_side or msg.right_side:
-             self.bumped = True
+             self.e_stop.set()
              self.drive(linear=0.0, angular=0.0)
 
     def process_scan(self, msg):
