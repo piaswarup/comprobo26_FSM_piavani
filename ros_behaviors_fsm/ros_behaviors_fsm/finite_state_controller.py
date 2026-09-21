@@ -4,6 +4,7 @@ from threading import Event
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
+from neato2_interfaces.msg import Bump
 import time
 import math
 
@@ -16,10 +17,12 @@ class FollowTurnDrawNode(Node):
     def __init__(self):
         super().__init__('follow_turn_draw_with_estop')
         self.e_stop = Event()
+        self.bumped = Event()
         self.detect_radius = 0.4 #radius of detection
         self.follow_dist = 0.2 #how closely the neato should follow the person
         self.obj_dist = None #distance to the closest obj or none if nothing is detected
         self.obj_angle = None #angle to get to the closest obj detected
+        self.bumped = False
 
         self.state = 'SEARCH'
         self.search_vel = 0.1 #how fast to drive forward while looking for someone to follow
@@ -36,6 +39,7 @@ class FollowTurnDrawNode(Node):
         self.vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.create_subscription(Bool, 'estop', self.handle_estop, 10)
         self.create_subscription(LaserScan, 'scan', self.process_scan, 10)
+        self.create_subscription(Bump, 'bump', self.process_bump, 10)
 
         self.timer = self.create_timer(0.1, self.run_loop)
 
@@ -50,13 +54,19 @@ class FollowTurnDrawNode(Node):
             self.e_stop.set()
             self.drive(linear=0.0, angular=0.0)
 
+    def process_bump(self, msg):
+        """ """
+        if msg.left_front or msg.right_front or msg.left_side or msg.right_side:
+             self.bumped = True
+             self.drive(linear=0.0, angular=0.0)
+
     def process_scan(self, msg):
         """Finds the closest reading within 0.4m and finds the dist and angle it is from neato"""
         distance = None
         angle = None
 
         for i, d in enumerate(msg.ranges):
-            if d == 0.0 or d > self.detect_radius:
+            if d == 0.0 or d > self.detect_radius or d < 0.19:
                 continue #discard readings outside of the radius
             if distance == None or d < distance: #records first valid reading then keeps going
                 distance = d #finds the closest obj and assign that to distance
@@ -87,6 +97,7 @@ class FollowTurnDrawNode(Node):
             self.draw_shape()
         else: #DONE
             self.drive(linear = 0.0, angular = 0.0)
+
 
     def search(self):
         """Drives forward until the lidar detects something to follow, then starts following.
