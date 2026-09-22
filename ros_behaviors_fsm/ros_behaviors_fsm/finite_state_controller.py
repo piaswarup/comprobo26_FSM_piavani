@@ -10,28 +10,35 @@ import math
 
 class FollowTurnDrawNode(Node):
     """Follows the closest thing within 40 cm with the lidar, turns 180 degrees, then
-    drives a square. Stops when estop is activated.
+    drives a pentagon. Stops when estop is activated.
 
     States: SEARCH -> FOLLOW -> TURN -> DRAW -> DONE
     """
     def __init__(self):
         super().__init__('follow_turn_draw_with_estop')
         self.e_stop = Event()
-        self.detect_radius = 0.4 #radius of detection
-        self.follow_dist = 0.2 #how closely the neato should follow the person
+        self.detect_radius = 0.6 #detection radius
+        self.follow_dist = 0.2 #person to neato dist
+        self.min_valid_dist = 0.07 #discard readings this close
         self.obj_dist = None #distance to the closest obj or none if nothing is detected
         self.obj_angle = None #angle to get to the closest obj detected
         self.state = 'SEARCH'
-        self.search_vel = 0.1 #how fast to drive forward while looking for someone to follow
-        self.run_time = 30.0 #the time we want it to follow the person for
+        self.search_vel = 0.1 #speed when searching for person
+        self.run_time = 30.0 #following time
         self.state_start = time.time() #when the current state began
-        self.turn_vel = 0.3 #angular speed for the 180 degree turn
+        self.turn_vel = 0.3 #speed for 180
 
-        turn_speed = 0.5 #angular speed for the 90 degree corners
-        side = [(0.2, 0.0, 2.0), #drive forward 0.4 m: (linear, angular, seconds)
-                (0.0, turn_speed, (math.pi / 2) / turn_speed)] #turn left 90 degrees
-        self.draw_steps = side * 4 #four sides make a square
-        self.step = 0 #which drawing step we are on
+        self.k_linear = 0.8 #speed scales with distance past follow_dist
+        self.max_linear_vel = 0.3 #max speed when following
+        self.last_seen = time.time() #last time person seen
+        self.last_angle = 0 #last angle person was seen at
+        self.lost_grace = 0.7 #how long to track last known angle
+
+        turn_speed = 0.5 #speed for the corners
+        side = [(0.2, 0.0, 2.0), #sides of 0.4 m
+                (0.0, turn_speed, (2 * math.pi / 5) / turn_speed)] #turn left 72 degrees
+        self.draw_steps = side * 5
+        self.step = 0 #drawing step
 
         self.vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.create_subscription(Bool, 'estop', self.handle_estop, 10)
@@ -63,7 +70,7 @@ class FollowTurnDrawNode(Node):
         angle = None
 
         for i, d in enumerate(msg.ranges):
-            if d == 0.0 or d > self.detect_radius or d < 0.19:
+            if d == 0.0 or d > self.detect_radius or d < self.min_valid_dist:
                 continue #discard readings outside of the radius
             if distance == None or d < distance: #records first valid reading then keeps going
                 distance = d #finds the closest obj and assign that to distance
@@ -71,6 +78,9 @@ class FollowTurnDrawNode(Node):
 
         self.obj_dist = distance
         self.obj_angle = angle
+        if distance is not None:
+            self.last_seen = time.time()
+            self.last_angle = angle
 
     def set_state(self, new_state):
         """Switches to a new state and restarts the state timer."""
@@ -99,33 +109,38 @@ class FollowTurnDrawNode(Node):
     def search(self):
         """Drives forward until the lidar detects something to follow, then starts following.
         """
-        if self.obj_dist is not None: #something is within the detection radius
+        if self.obj_dist is not None: #something is within 0.6 radius
             self.drive(linear = 0.0, angular = 0.0)
-            self.set_state('FOLLOW') #the follow timer starts now
+            self.set_state('FOLLOW') #start timer for following
         else:
             self.drive(linear = self.search_vel, angular = 0.0)
 
     def follow_person(self):
         """Follows the person. Moves on to the turn after the 30 seconds are up.
         """
-        if time.time() - self.state_start >= self.run_time: #if time is up
+        if time.time() - self.state_start >= self.run_time: #check time
             self.drive(linear = 0.0, angular = 0.0)
-            self.set_state('TURN') #hand off to the next state instead of shutting down
+            self.set_state('TURN') #move to turn state
             return
 
-        if self.obj_dist is None: #if it cannot find anything within the correct distance (just stops)
-            self.drive(linear = 0.0, angular = 0.0)
+        if self.obj_dist is None: #if person lost
+            if time.time() - self.last_seen < self.lost_grace: #turn to last known angle if in grace period
+                angle = self.last_angle
+                if angle > 180:
+                    angle -= 360
+                angular_vel = 0.01*angle
+                self.drive(linear = 0.0, angular = angular_vel)
+            else: #stop past grace period
+                self.drive(linear = 0.0, angular = 0.0)
             return
 
         angle = self.obj_angle
         if angle > 180:
-            angle -= 360 #converts any angle greater than 180 into a negative by subtracting 360
-        angular_vel = 0.01*angle #proportional turning speed (positive angle = left = counterclockwise)
+            angle -= 360
+        angular_vel = 0.01*angle #proportional turning speed
 
-        if self.obj_dist > self.follow_dist:
-            linear_vel = 0.1 #keeps driving up to the obj
-        else:
-            linear_vel = 0.0
+        #proportional speed scales with distance
+        linear_vel = min(self.max_linear_vel, max(0.0, self.k_linear*(self.obj_dist - self.follow_dist)))
         self.drive(linear = linear_vel, angular = angular_vel)
 
     def turn_left(self):
@@ -141,13 +156,13 @@ class FollowTurnDrawNode(Node):
         """Steps through draw_steps one at a time to drive the square.
         state_start is reset at the start of every step.
         """
-        if self.step >= len(self.draw_steps): #finished every side
+        if self.step >= len(self.draw_steps): #finished all sides
             self.drive(linear = 0.0, angular = 0.0)
             self.set_state('DONE')
             return
 
         linear, angular, duration = self.draw_steps[self.step]
-        if time.time() - self.state_start >= duration: #this step is finished
+        if time.time() - self.state_start >= duration:
             self.step += 1
             self.state_start = time.time()
         else:
