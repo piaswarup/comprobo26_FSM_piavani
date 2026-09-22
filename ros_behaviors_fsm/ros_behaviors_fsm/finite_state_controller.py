@@ -4,6 +4,7 @@ from threading import Event
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import Bool
+from visualization_msgs.msg import Marker
 from neato2_interfaces.msg import Bump
 import time
 import math
@@ -41,6 +42,7 @@ class FollowTurnDrawNode(Node):
         self.step = 0 #drawing step
 
         self.vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
+        self.marker_pub = self.create_publisher(Marker, 'visualization_marker', 10)
         self.create_subscription(Bool, 'estop', self.handle_estop, 10)
         self.create_subscription(LaserScan, 'scan', self.process_scan, 10)
         self.create_subscription(Bump, 'bump', self.process_bump, 10)
@@ -92,8 +94,37 @@ class FollowTurnDrawNode(Node):
         if distance is not None:
             self.last_seen = time.time()
             self.last_angle = angle
+        self.publish_person_marker(msg.header.frame_id, distance, angle)
+        
 
         self.get_logger().info(f'obj_dist={self.obj_dist}, obj_angle={self.obj_angle}') #see what LIDAR is reporting
+
+    def publish_person_marker(self, frame_id, distance, angle):
+        """Publishes a sphere marker at the tracked person's location, or 
+        deletes it if nothing is tracked."""
+        marker = Marker()
+        marker.header.frame_id = frame_id
+        marker.header.stamp = self.get_clock().now().to_msg()
+        marker.ns = 'person'
+        marker.id = 0
+        marker.type = Marker.SPHERE
+        if distance is None:
+            marker.action = Marker.DELETE
+        else:
+            marker.action = Marker.ADD
+            angle_rad = math.radians(angle)
+            marker.pose.position.x = distance * math.cos(angle_rad)
+            marker.pose.position.y = distance * math.sin(angle_rad)
+            marker.pose.position.z = 0.0
+            marker.pose.orientation.w = 1.0
+            marker.scale.x = 0.2
+            marker.scale.y = 0.2
+            marker.scale.z = 0.2
+            marker.color.r = 1.0
+            marker.color.g = 0.0
+            marker.color.b = 0.0
+            marker.color.a = 1.0
+        self.marker_pub.publish(marker)
 
     def set_state(self, new_state):
         """Switches to a new state and restarts the state timer.

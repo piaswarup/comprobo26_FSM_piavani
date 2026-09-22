@@ -15,8 +15,8 @@ setup(
     zip_safe=True,
     maintainer='pswarup',
     maintainer_email='piaswarup@gmail.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Finite-state behavior controller for the Neato: search for and follow a person, turn 180 degrees, then draw a pentagon.',
+    license='MIT',
     extras_require={
         'test': [
             'pytest',
