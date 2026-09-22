@@ -16,6 +16,7 @@ class PersonFollowingNode(Node):
         self.obj_dist = None #distance to the closest obj or none if nothing is detected
         self.obj_angle = None #angle to get to the closest obj detected
 
+        self.state = 'FOLLOW' #current FSM state: FOLLOW -> TURN -> DRAW -> DONE
         self.run_time = 30.0 #the time we want it to follow the person for
         self.start_time = time.time() #starts the timer
 
@@ -56,11 +57,12 @@ class PersonFollowingNode(Node):
         """Executes the main logic for following the person.
         Stops running after the 30 seconds are up.
         """
-        passed_time = self.run_time - self.start_time
-        if passed_time >= self.run_time: #if time is up
+        if self.state != 'FOLLOW': #following is finished, later states handle driving
+            return
+
+        if time.time() - self.start_time >= self.run_time: #if time is up
             self.drive(linear = 0.0, angular = 0.0)
-            self.timer.cancel()
-            rclpy.shutdown() #idk how to integrate this into the rest so it's gonna shut down for now
+            self.state = 'TURN' #hand off to the next state instead of shutting down
             return
 
         if self.e_stop.is_set(): #if the estop is activated by the bump
@@ -73,7 +75,7 @@ class PersonFollowingNode(Node):
         angle = self.obj_angle 
         if angle > 180:
             angle -= 360 #converts any angle greater than 180 into a negative by subtracting 360
-        angular_vel = -0.01*angle #proportional turning speed
+        angular_vel = 0.01*angle #proportional turning speed (positive angle = left = counterclockwise)
 
         if self.obj_dist > self.follow_dist: 
             linear_vel = 0.1 #keeps driving up to the obj
