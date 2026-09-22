@@ -34,6 +34,7 @@ Key Design Decisions:
 	The estop check is placed at the beginning of run_loop instead of being checked within each of the four behaviors. This guarantees that the estop always takes priority without needing to be duplicated across every state. The zero-velocity command is also published directly from the sensor callbacks, so the stop command goes out immediately.
 
 Demo:
+	https://youtube.com/shorts/1X_KKTO2R_c?feature=share
 
 ### Behavior 2: Person Following
 
@@ -47,7 +48,7 @@ Key Design Decisions:
 	Proportional linear velocity was used because it produces a smoother following behavior. The last known angle grace period was added because with a single closest-point LIDAR reading, momentary sensor noise or a person briefly stepping just outside the 0.6m radius could otherwise cause the robot to stop and lose the person entirely. Allowing the robot to keep turning makes tracking noticeably more robust to brief signal dropouts without making the Neato chase something that is truly not there. The raw LIDAR data is also converted into a signed -180/+180 range before computing angular velocity to make the left/right distinctions much simpler. 
 
 Demo:
-	ADD VIDEO
+	https://youtube.com/shorts/BxPyXvjqM9E
 
 ### Behavior 3: 180 degree turn
 
@@ -61,7 +62,7 @@ Key Design Decisions:
 	This was implemented as a timed, non-blocking behavior rather than using sleep to pause execution for the turn’s duration. A sleep call would not allow for the estop to work during the duration of the turn. Tracking elapsed time against a stored timestamp lets the estop callback still fire when needed. 
 
 Demo:
-	Add Video
+	https://youtube.com/shorts/PTLDGjnhIY4 
 
 ### Behavior 4: Pentagon Shape
 
@@ -75,7 +76,7 @@ Key Design Decisions:
 The pentagon is represented by a list of linear, angular, and duration steps rather than hardcoding five separate drive then turn calls. This made the shape easy to read and modify as the only changes would be with the degrees in the turn and the repeat count. This behavior is also timed to allow the estop to be called at any point in the drawing process. 
 
 Demo:
-Put in demo ig 
+	https://youtube.com/shorts/MimVg_-Lq70 
 
 ## Finite State Machine
 ### Overall Design
