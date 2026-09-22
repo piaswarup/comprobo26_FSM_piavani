@@ -16,7 +16,7 @@ class Turn(Node):
         # create a thread to handle long-running component
         self.vel_pub = self.create_publisher(Twist, 'cmd_vel', 10)
         self.create_subscription(Bool, 'estop', self.handle_estop, 10)
-        self.run_loop_thread = Thread(target=self.run_loop)
+        self.run_loop_thread = Thread(target=self.turn_left) ###############################################needs to be changed
         self.run_loop_thread.start()
 
 
