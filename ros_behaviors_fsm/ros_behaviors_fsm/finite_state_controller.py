@@ -10,7 +10,7 @@ import math
 
 class FollowTurnDrawNode(Node):
     """Follows the closest thing within 40 cm with the lidar, turns 180 degrees, then
-    drives a pentagon. Stops when estop is activated.
+    drives a pentagon. Stops when estop is activated at any time.
 
     States: SEARCH -> FOLLOW -> TURN -> DRAW -> DONE
     """
@@ -59,13 +59,24 @@ class FollowTurnDrawNode(Node):
             self.drive(linear=0.0, angular=0.0)
 
     def process_bump(self, msg):
-        """ """
+        """ Handles messages received on the bump topic
+
+        Args:
+            msg (std_msgs.msg.Bool): the message that takes value true if any of 
+            the bump sensors are triggered and false otherwise.
+        """
         if msg.left_front or msg.right_front or msg.left_side or msg.right_side:
              self.e_stop.set()
              self.drive(linear=0.0, angular=0.0)
+             print("bump activated")
 
     def process_scan(self, msg):
-        """Finds the closest reading within 0.4m and finds the dist and angle it is from neato"""
+        """Finds the closest reading within 0.6m and finds the dist and angle it is from neato.
+            Also stores the most recent time and angle of the person.
+
+        Args:
+            msg (sensor_msgs.msg.LaserScan): the message that comes in from the LIDAR sensor
+        """
         distance = None
         angle = None
 
@@ -82,8 +93,14 @@ class FollowTurnDrawNode(Node):
             self.last_seen = time.time()
             self.last_angle = angle
 
+        self.get_logger().info(f'obj_dist={self.obj_dist}, obj_angle={self.obj_angle}') #see what LIDAR is reporting
+
     def set_state(self, new_state):
-        """Switches to a new state and restarts the state timer."""
+        """Switches to a new state and restarts the state timer.
+
+        Args:
+            new_state: A string representing the next state
+        """
         self.get_logger().info(f'{self.state} -> {new_state}')
         self.state = new_state
         self.state_start = time.time()
@@ -154,7 +171,7 @@ class FollowTurnDrawNode(Node):
 
     def draw_shape(self):
         """Steps through draw_steps one at a time to drive the square.
-        state_start is reset at the start of every step.
+            state_start is reset at the start of every step.
         """
         if self.step >= len(self.draw_steps): #finished all sides
             self.drive(linear = 0.0, angular = 0.0)
